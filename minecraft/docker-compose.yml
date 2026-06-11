@@ -1,0 +1,49 @@
+services:
+  minecraft:
+    image: itzg/minecraft-server
+    container_name: mc-server
+    ports:
+      - "25565:25565"       # Port Utama Minecraft (TCP)
+      - "18432:18432/udp"   # Port Simple Voice Chat (WAJIB UDP)
+      - "19132:19132/udp"
+    environment:
+      # --- Dasar Server ---
+      EULA: "TRUE"
+      TYPE: "PAPER"         # Menggunakan Paper MC
+      VERSION: "1.21.8"
+      MEMORY: "6G"          # Set RAM ke 6GB
+
+      DIFFICULTY: "hard"
+
+      # --- Mode Crack / Offline ---
+      # FALSE = Crack bisa masuk (tidak cek ke Mojang)
+      ONLINE_MODE: "FALSE"
+
+      # --- Keamanan & Whitelist ---
+      ENABLE_WHITELIST: "TRUE"
+      ENFORCE_WHITELIST: "TRUE"
+      #OPS: "NamaAdminKamu"  # Ganti dengan nickname kamu jika ingin langsung jadi OP
+
+      MOTD: "Server Mabar WACANA"
+
+      # --- Plugin Otomatis (Via Modrinth) ---
+      # Ini akan otomatis download plugin saat server start
+      # simple-voice-chat: Untuk voice chat
+      # authme-reloaded: Untuk login password (wajib buat server crack)
+      #MODRINTH_PROJECTS: "simple-voice-chat,authme-reloaded"
+
+    volumes:
+      # Data disimpan di folder 'minecraft' di sebelah file ini
+      - ./minecraft:/data
+
+    networks:
+      - game-net
+
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+# Membuat network baru agar terpisah
+networks:
+  game-net:
+    external: true

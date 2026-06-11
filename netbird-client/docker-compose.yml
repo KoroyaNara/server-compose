@@ -1,0 +1,32 @@
+#services:
+#  netbird:
+#      container_name: netbird-client
+#      hostname: koroya-server
+#      restart: unless-stopped
+#      cap_add:
+#          - NET_ADMIN
+#          - SYS_ADMIN
+#          - SYS_RESOURCE
+#      network_mode: host
+#      environment:
+#          - NB_SETUP_KEY=${NB_SETUP_KEY}
+#      volumes:
+#          - ./config:/etc/netbird
+#          - ./data:/var/lib/netbird
+#      image: netbirdio/netbird:0.60.7
+##volumes:
+#  #netbird-client:
+#      #name: netbird-client
+services:
+  netbird:
+    image: netbirdio/netbird:0.60.7
+    container_name: netbird-client
+    hostname: koroya-server
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    environment:
+      - NB_SETUP_KEY=${NB_SETUP_KEY}
+    volumes:
+      - ./config:/etc/netbird
+      - ./data:/var/lib/netbird

@@ -1,0 +1,19 @@
+services:
+  playit:
+    image: ghcr.io/playit-cloud/playit-agent:0.16
+    container_name: playit-agent
+    environment:
+      # Key kamu sudah saya masukkan di sini
+      - SECRET_KEY=secret_key_kamu
+    volumes:
+      # Data playit disimpan di folder ini (lokal)
+      - ./playit-data:/data
+    networks:
+      - game-net # WAJIB SAMA dengan network minecraft
+    restart: unless-stopped
+
+# Panggil network yang sudah dibuat manual
+networks:
+  game-net:
+    external: true
+
