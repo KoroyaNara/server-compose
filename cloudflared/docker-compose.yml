@@ -4,7 +4,7 @@ services:
     container_name: cloudflared_tunnel
     restart: unless-stopped
     volumes:
-      - ./config:/home/nonroot/ .cloudflared
+      - ./config:/home/nonroot/.cloudflared
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}

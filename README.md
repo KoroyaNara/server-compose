@@ -1,6 +1,6 @@
 # 🏠 server-compose
 
-Koleksi Docker Compose stack untuk home server pribadi. Semua service berjalan di atas Docker dan terhubung satu sama lain lewat shared network. (**BERDASARKAN PENGALAMAN**)
+Koleksi Docker Compose stack untuk home server pribadi (Dell OptiPlex 3060, Ubuntu Server). Setiap service punya folder dan compose file sendiri, dan network-nya dipisah sesuai kebutuhan. Lihat [Arsitektur Network](#-arsitektur-network). (**BERDASARKAN PENGALAMAN**)
 
 ---
 
@@ -8,12 +8,12 @@ Koleksi Docker Compose stack untuk home server pribadi. Semua service berjalan d
 
 | Service | Deskripsi | Port |
 |---|---|---|
-| [AdGuard Home](#%EF%B8%8F-adguard-home) | DNS-level ad blocker & tracker blocker | `53`, `8080` |
+| [AdGuard Home](#%EF%B8%8F-adguard-home) | DNS-level ad blocker & tracker blocker | `53`, `3000`, `8080` |
 | [Nginx Proxy Manager](#-nginx-proxy-manager-npm) | Reverse proxy + SSL otomatis | `80`, `443`, `81` |
 | [Cloudflared](#%EF%B8%8F-cloudflared-tunnel) | Cloudflare Tunnel — expose service ke internet tanpa buka port router | — |
 | [NetBird Client](#-netbird-client) | VPN mesh network peer-to-peer | — |
-| [ownCloud](#%EF%B8%8F-owncloud) | Self-hosted cloud storage + file sharing | `8080` |
-| [Minecraft Server](#-minecraft-server) | Paper MC server dengan voice chat & crack support | `25565` |
+| [ownCloud](#%EF%B8%8F-owncloud) | Self-hosted cloud storage + file sharing | `8081` (atur lewat `HTTP_PORT`) |
+| [Minecraft Server](#-minecraft-server) | Paper MC server dengan voice chat & crack support | `25565`, `18432/udp`, `19132/udp` |
 | [Playit Agent](#-playit-agent) | Tunnel Minecraft ke internet via playit.gg | — |
 
 ---
@@ -27,15 +27,58 @@ Pastikan sudah terinstall sebelum mulai:
 
 ---
 
-## 🌐 Setup Network
+## 🌐 Arsitektur Network
 
-Semua service menggunakan shared network. Buat network-nya dulu sebelum menjalankan stack manapun:
+Tidak semua container berada di satu network. Pembagiannya:
+
+| Network | Tipe | Container |
+|---|---|---|
+| `private-net` | external, dibuat manual | `adguardhome`, `npm`, `cloudflared_tunnel` |
+| `game-net` | external, dibuat manual | `mc-server`, `playit-agent` |
+| `owncloud_default` | dibuat otomatis oleh Compose | `owncloud_server`, `owncloud_mariadb`, `owncloud_redis` |
+| host (`network_mode: host`) | network milik host | `netbird-client` |
+
+```mermaid
+flowchart LR
+    CF[Cloudflare] -.-> cloudflared
+    PG[playit.gg] -.-> playit
+    NB[NetBird peers] -.-> netbird
+
+    subgraph private-net
+        cloudflared[cloudflared_tunnel]
+        adguard[adguardhome]
+        npm[npm]
+    end
+
+    subgraph game-net
+        playit[playit-agent] --> mc[mc-server]
+    end
+
+    subgraph owncloud_default
+        oc[owncloud_server] --> db[owncloud_mariadb]
+        oc --> redis[owncloud_redis]
+    end
+
+    subgraph host network
+        netbird[netbird-client]
+    end
+
+    oc --> hdd[(/mnt/hdd)]
+```
+
+Garis putus-putus = koneksi yang diatur di dashboard masing-masing layanan, bukan di compose file.
+
+> **Catatan:** network terpisah bukan berarti terisolasi penuh. Port yang di-publish ke host (`ports:`) tetap bisa diakses dari LAN lewat IP server.
+
+### Buat network external
+
+Buat dua network ini sebelum menjalankan stack manapun. `owncloud_default` tidak perlu dibuat karena Compose membuatnya otomatis.
 
 ```bash
-# Network untuk service utama (adguard, npm, cloudflared, owncloud)
+# Service utama (adguardhome, npm, cloudflared)
 docker network create private-net
 
-# Network untuk game server (minecraft + playit)
+# Game server (minecraft + playit)
 docker network create game-net
 ```
 
@@ -50,11 +93,15 @@ git clone https://github.com/KoroyaNara/server-compose.git
 cd server-compose
 ```
 
-Masuk ke folder service yang ingin dijalankan, lalu:
+Masuk ke folder service yang ingin dijalankan. Kalau ada file `.env.example`, salin dulu jadi `.env` lalu isi nilainya:
 
 ```bash
+cp .env.example .env
+nano .env
 docker compose up -d
 ```
+
+> File `.env` berisi token dan password, jadi sudah masuk `.gitignore` dan tidak ikut ter-commit.
 
 ---
 
@@ -178,7 +225,9 @@ Buat proxy host untuk setiap service — mulai dari AdGuard Home dan NPM itu sen
 3. Tab **SSL** → pilih sertifikat wildcard yang tadi dibuat → aktifkan **Force SSL**
 4. Klik **Save**
 
-> Gunakan nama container sebagai hostname karena semua service berada di `private-net` yang sama, sehingga Docker bisa resolve nama container langsung.
+> Nama container bisa dipakai sebagai hostname karena AdGuard Home dan NPM sama-sama berada di `private-net`, sehingga Docker bisa resolve nama container langsung.
+>
+> ownCloud **tidak** berada di `private-net`, jadi untuk proxy host ownCloud isi **Forward Hostname/IP** dengan IP server (contoh `192.168.1.100`) dan **Forward Port** dengan nilai `HTTP_PORT` (default `8081`).
 
 ---
 
@@ -226,10 +275,11 @@ Expose service ke internet tanpa perlu buka port di router (zero trust tunnel vi
 **Setup:**
 
 1. Buat tunnel di [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Salin token tunnel, lalu isi file `.env`:
+2. Salin token tunnel, lalu buat file `.env` dari contoh:
 
-```env
-TUNNEL_TOKEN=token_kamu_di_sini
+```bash
+cd cloudflared
+cp .env.example .env   # isi TUNNEL_TOKEN
 ```
 
 3. Jalankan:
@@ -248,10 +298,11 @@ Koneksi VPN mesh antar device/server secara peer-to-peer menggunakan WireGuard d
 **Setup:**
 
 1. Daftar di [NetBird](https://netbird.io/) dan buat Setup Key baru
-2. Isi file `.env`:
+2. Buat file `.env` dari contoh:
 
-```env
-NB_SETUP_KEY=setup_key_kamu
+```bash
+cd netbird-client
+cp .env.example .env   # isi NB_SETUP_KEY
 ```
 
 3. Jalankan:
@@ -311,27 +362,26 @@ Self-hosted cloud storage. Data file disimpan di HDD eksternal (`/mnt/hdd`), den
 **Setup:**
 
 1. Pastikan HDD sudah di-mount ke `/mnt/hdd` di server
-2. Sesuaikan file `.env`:
+2. Buat file `.env` dari contoh, lalu isi semua nilainya (termasuk `DB_PASSWORD` dan `DB_ROOT_PASSWORD`):
 
-```env
-OWNCLOUD_VERSION=10.16
-OWNCLOUD_DOMAIN=localhost:8080
-OWNCLOUD_TRUSTED_DOMAINS=domain.kamu.com
-ADMIN_USERNAME=username_admin
-ADMIN_PASSWORD=password_yang_kuat
-HTTP_PORT=8080
+```bash
+cd owncloud
+cp .env.example .env
 ```
 
 3. Jalankan:
 
 ```bash
-cd owncloud
 docker compose up -d
 ```
 
-**Akses:** `http://<IP-SERVER>:8080`
+**Akses:** `http://<IP-SERVER>:8081`
 
-> Stack ini menjalankan tiga container sekaligus: ownCloud, MariaDB, dan Redis.
+> Stack ini menjalankan tiga container sekaligus: ownCloud, MariaDB, dan Redis. Ketiganya berada di network `owncloud_default` yang dibuat otomatis oleh Compose, dan MariaDB serta Redis tidak membuka port ke host.
+
+> **Port:** default `HTTP_PORT` adalah `8081` karena `8080` sudah dipakai admin UI AdGuard Home. Kalau port `8080` AdGuard sudah kamu tutup (lihat bagian Hardening), ownCloud boleh memakai `8080`.
+
+> **Password database:** `DB_PASSWORD` dan `DB_ROOT_PASSWORD` hanya dipakai saat MariaDB pertama kali dibuat. Kalau database sudah ada, isi `.env` dengan password yang lama. Mengganti nilainya di `.env` saja tidak mengubah password di dalam MariaDB.
 
 ---
 
@@ -419,19 +469,20 @@ Tunnel Minecraft ke internet via [playit.gg](https://playit.gg) — cocok jika t
 **Setup:**
 
 1. Daftar di playit.gg dan buat agent baru
-2. Salin secret key ke file `docker-compose.yml`:
+2. Buat file `.env` dari contoh lalu isi secret key agent:
 
-```yaml
-environment:
-  - SECRET_KEY=secret_key_kamu
+```bash
+cd playit
+cp .env.example .env   # isi SECRET_KEY
 ```
 
 3. Jalankan:
 
 ```bash
-cd playit
 docker compose up -d
 ```
+
+> `playit-agent` wajib berada di network yang sama dengan `mc-server` (`game-net`), supaya agent bisa menjangkau server Minecraft lewat nama container.
 
 ---
 
@@ -439,32 +490,39 @@ docker compose up -d
 
 ```
 server-compose/
+├── .gitignore
 ├── adguardhome/
 │   └── docker-compose.yml
 ├── cloudflared/
 │   ├── docker-compose.yml
-│   └── .env                  # TUNNEL_TOKEN
+│   └── .env.example          # TUNNEL_TOKEN
 ├── minecraft/
 │   └── docker-compose.yml
 ├── netbird-client/
 │   ├── docker-compose.yml
-│   └── .env                  # NB_SETUP_KEY
+│   └── .env.example          # NB_SETUP_KEY
 ├── npm/
 │   └── docker-compose.yml
 ├── owncloud/
 │   ├── docker-compose.yml
-│   └── .env                  # Konfigurasi ownCloud
+│   └── .env.example          # Konfigurasi ownCloud + password DB
 └── playit/
-    └── docker-compose.yml
+    ├── docker-compose.yml
+    └── .env.example          # SECRET_KEY
 ```
+
+File `.env` asli dibuat sendiri di server dari `.env.example` dan tidak ikut di-commit.
 
 ---
 
 ## 🔐 Catatan Keamanan
 
-- Ganti semua password dan secret key default sebelum production
-- Gunakan NPM untuk SSL termination agar semua traffic ke service dienkripsi
-- Manfaatkan Cloudflare Tunnel + NetBird untuk akses remote yang aman tanpa expose port langsung
+- Semua token dan password disimpan di `.env` yang tidak di-commit. Jangan menulis secret langsung di `docker-compose.yml`.
+- Ganti semua password dan secret key default sebelum dipakai.
+- Gunakan NPM untuk SSL termination agar traffic ke service dienkripsi.
+- Cloudflare Tunnel dan NetBird dipakai untuk akses remote tanpa membuka port di router.
+- Pemisahan Docker network membatasi container mana yang bisa saling memanggil, tapi **bukan** firewall. Port yang di-publish ke host tetap terbuka di LAN, jadi tutup port yang tidak perlu (lihat bagian Hardening).
+- `netbird-client` berjalan dengan `privileged: true` dan host network, jadi container ini punya akses luas ke host.
 
 ---
 

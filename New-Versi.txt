@@ -1,0 +1,8 @@
+image: jc21/nginx-proxy-manager:2.15.0      # private-net
+image: adguard/adguardhome:v0.107.77        # private-net
+image: cloudflare/cloudflared:2026.6.0      # private-net
+image: owncloud/server:10.16.0              # Default Docker Networks
+image: vaultwarden/server:1.36.0            # Default Docker Networks
+image: netbirdio/netbird                    # Default Docker Networks
+image: ghcr.io/playit-cloud/playit-agent    # game-net
+image: itzg/minecraft-server                # game-net

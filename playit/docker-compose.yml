@@ -3,8 +3,8 @@ services:
     image: ghcr.io/playit-cloud/playit-agent:0.16
     container_name: playit-agent
     environment:
-      # Key kamu sudah saya masukkan di sini
-      - SECRET_KEY=secret_key_kamu
+      # Secret key diambil dari file .env (lihat .env.example)
+      - SECRET_KEY=${SECRET_KEY}
     volumes:
       # Data playit disimpan di folder ini (lokal)
       - ./playit-data:/data

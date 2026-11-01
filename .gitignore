@@ -1,0 +1,13 @@
+# Secret: jangan pernah di-commit. Salin dari .env.example
+.env
+
+# Data runtime tiap service (dibuat otomatis saat container jalan)
+adguardhome/workdir/
+adguardhome/confdir/
+npm/data/
+npm/letsencrypt/
+cloudflared/config/
+netbird-client/config/
+netbird-client/data/
+minecraft/minecraft/
+playit/playit-data/
